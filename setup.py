@@ -21,7 +21,8 @@ setup(
     entry_points={
         'console_scripts': [
             'video_publisher = object_tracking.video_publisher:main',  # ✅ Ensure this line is here
-            'buoy_tracker = object_tracking.buoy_tracker:main'
+            'buoy_tracker = object_tracking.buoy_tracker:main',
+            'tag_tracker = object_tracking.tag_tracker:main'
         ],
     },
 )

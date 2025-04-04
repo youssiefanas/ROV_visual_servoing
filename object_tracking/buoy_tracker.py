@@ -32,8 +32,8 @@ class BuoyTracker(Node):
         self.rect_x2 = 0
         self.rect_y2 = 0
         
-        self.z_ref = 0.1
-        self.area_ref = 0.4
+        self.z_ref = 1
+        self.area_ref = 10000
         self.z_des = self.z_ref
 
         # ROS2 subscribers & publishers
@@ -81,14 +81,16 @@ class BuoyTracker(Node):
             if event == cv2.EVENT_LBUTTONDOWN and flags != cv2.EVENT_FLAG_SHIFTKEY:
                 self.get_hsv = True
                 self.mouseX, self.mouseY = x, y
-                print(self.upper_hsv)
+                print("update hsv",self.upper_hsv)
 
             # if flags == cv2.EVENT_FLAG_SHIFTKEY:
             #     print("Shift key pressed")
             if event == cv2.EVENT_LBUTTONDOWN and flags == cv2.EVENT_FLAG_SHIFTKEY:
                 self.set_desired_point = True
                 self.mouseX, self.mouseY = x, y
-                # self.z_des = self.depth
+                self.z_des = self.depth
+                # print("Desired point: ", self.mouseX, self.mouseY)
+                # print("Depth: ", self.depth)
             if event == cv2.EVENT_LBUTTONDOWN and flags == cv2.EVENT_FLAG_CTRLKEY:
                 self.set_desired_area = True
                 self.rect_x1, self.rect_y1 = x, y
@@ -146,7 +148,8 @@ class BuoyTracker(Node):
         # Compute velocity command
         velocity = -lambda_gain * L_pinv @ error
         v_z = -lambda_gain * depth_err
-        return velocity, v_z
+        velocity[2] = v_z  # Set the vertical velocity to the computed depth error
+        return velocity
     
             
 
@@ -271,6 +274,7 @@ class BuoyTracker(Node):
 
             if self.set_desired_point:
                 print("Desired point: ", self.desired_point())
+                print("Depth: ", self.depth)
                 self.set_desired_point = False
 
             # Convert to HSV
@@ -297,6 +301,7 @@ class BuoyTracker(Node):
                     cv2.circle(self.frame, center, radius, (0, 255, 0), 2)
                     cv2.circle(self.frame, center, 5, (0, 0, 255), -1)
                     self.area = cv2.contourArea(largest_contour)
+                    print("Area: ", self.area)
                 
 
             # Publish center coordinates
@@ -311,8 +316,8 @@ class BuoyTracker(Node):
 
             L  = self.interaction_matrix((x, y),self.depth)
             v_cam = self.compute_camera_velocity(L,self.error,depth_err)
-            print(v_cam)
-            # print (self.full_velocity_transform(v_cam))
+            print("Velocity in camera frame: ", v_cam)
+            print ("vehcile speed",self.full_velocity_transform(v_cam))
 
 
 
