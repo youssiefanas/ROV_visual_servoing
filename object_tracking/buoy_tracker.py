@@ -5,6 +5,7 @@ import numpy as np
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float64MultiArray
+from geometry_msgs.msg import Twist
 
 class BuoyTracker(Node):
     def __init__(self):
@@ -32,18 +33,24 @@ class BuoyTracker(Node):
         self.rect_x2 = 0
         self.rect_y2 = 0
         
-        self.z_ref = 1
-        self.area_ref = 10000
-        self.z_des = self.z_ref
+        # self.z_ref = 1
+        self.area_ref = 6000
+        self.buoy_size = 22 # Size of the buoy in meters
+        self.z_des = 0.5  # Desired depth in meters
 
         # ROS2 subscribers & publishers
         self.subscription = self.create_subscription(
             Image,
-            'video_topic',  # This is the topic your camera publisher uses
+            '/bluerov2/camera/image',  # This is the topic your camera publisher uses
             self.image_callback,
             10
         )
         self.publisher = self.create_publisher(Float64MultiArray, 'tracked_point', 10)
+        # creat a publisher for the cam velocity
+        self.publisher_velocity = self.create_publisher(Twist, 'camera_velocity', 10)
+
+        # pub robot velocity
+        self.publisher_robot_velocity = self.create_publisher(Twist, 'robot_velocity', 10)
 
         # OpenCV Bridge
         self.bridge = CvBridge()
@@ -133,7 +140,9 @@ class BuoyTracker(Node):
     def interaction_matrix (self, point, depth):
         L = []
 
-        Z = depth
+        Z = 1
+        if Z < 0.001:
+            Z = 0.001
         x,y  = self.convert2meter(point, self.u0, self.v0, self.lx, self.ly)
         
         L =  np.array([
@@ -227,7 +236,7 @@ class BuoyTracker(Node):
         :param t: 3x1 translation vector (camera origin w.r.t robot frame, expressed in camera frame)
         :return: v_robot: (6,) numpy array
         """
-        x, y, z = np.array([0.1, 0.0, 0.05])
+        x, y, z = np.array([0.172, 0, 0.03])
 
         skew = np.array([
         [0, -z, y],
@@ -235,11 +244,11 @@ class BuoyTracker(Node):
         [-y, x, 0]
         ])
 
-        theta = np.radians(90)
+        
         R = np.array([
-            [np.cos(theta), -np.sin(theta), 0],
-            [np.sin(theta),  np.cos(theta), 0],
-            [0, 0, 1]
+           [ 0, 0, 1],
+           [1,0,0],
+            [0, 1,0]
         ]) 
 
         v_c_lin = v_camera[:3]
@@ -299,9 +308,10 @@ class BuoyTracker(Node):
                     center = (int(x), int(y))
                     radius = int(radius)
                     cv2.circle(self.frame, center, radius, (0, 255, 0), 2)
+                    cv2.circle(self.frame, (self.mouseX,self.mouseY), 5, (255, 0, 255), 2)
                     cv2.circle(self.frame, center, 5, (0, 0, 255), -1)
                     self.area = cv2.contourArea(largest_contour)
-                    print("Area: ", self.area)
+                    # print("Area: ", self.area)
                 
 
             # Publish center coordinates
@@ -311,13 +321,39 @@ class BuoyTracker(Node):
 
             self.error = []
             self.error.extend([x - self.mouseX, y - self.mouseY])
-            self.depth = (self.area * self.z_ref)/self.area_ref
+            self.depth = self.buoy_size*self.lx/self.area 
+            # self.buoy_size = 1*self.area/self.lx
+            # print("buoy size: ", self.buoy_size)
+            # print("Depth: ", self.depth)
             depth_err = self.depth - self.z_des
 
             L  = self.interaction_matrix((x, y),self.depth)
             v_cam = self.compute_camera_velocity(L,self.error,depth_err)
-            print("Velocity in camera frame: ", v_cam)
-            print ("vehcile speed",self.full_velocity_transform(v_cam))
+            # print("Velocity in camera frame: ", v_cam)
+            # publish camera velocity
+            velocity_msg = Twist()
+            velocity_msg.linear.x = v_cam[0]
+            velocity_msg.linear.y = v_cam[1]
+            velocity_msg.linear.z = v_cam[2]    
+            velocity_msg.angular.x = v_cam[3]
+            velocity_msg.angular.y = v_cam[4]
+            velocity_msg.angular.z = v_cam[5]   
+            self.publisher_velocity.publish(velocity_msg)
+            
+            # print("desired point: ", self.desired_point())
+            # print("error: ", self.error)
+            robot_vel = self.full_velocity_transform(v_cam)
+            # publish robot velocity
+            robot_velocity_msg = Twist()
+            robot_velocity_msg.linear.x = robot_vel[0]
+            robot_velocity_msg.linear.y = robot_vel[1]
+            robot_velocity_msg.linear.z = robot_vel[2]
+            robot_velocity_msg.angular.x = robot_vel[3]
+            robot_velocity_msg.angular.y = robot_vel[4]
+            robot_velocity_msg.angular.z = robot_vel[5]
+            self.publisher_robot_velocity.publish(robot_velocity_msg)
+
+
 
 
 
