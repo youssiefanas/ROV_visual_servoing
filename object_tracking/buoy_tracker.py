@@ -247,9 +247,9 @@ class BuoyTracker(Node):
         
         R = np.array([
            [ 0, 0, 1],
-           [1,0,0],
-            [0, 1,0]
-        ]) 
+           [-1,0,0],
+            [0, -1,0]
+        ])
 
         v_c_lin = v_camera[:3]
         v_c_ang = v_camera[3:]
