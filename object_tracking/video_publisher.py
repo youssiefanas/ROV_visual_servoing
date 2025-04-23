@@ -29,7 +29,7 @@ class VideoPublisher(Node):
         
         # Publish
         self.publisher.publish(img_msg)
-        self.get_logger().info("Published video frame")
+        # self.get_logger().info("Published video frame")
 
     def destroy_node(self):
         self.cap.release()

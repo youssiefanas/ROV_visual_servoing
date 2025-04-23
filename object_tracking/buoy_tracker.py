@@ -41,7 +41,8 @@ class BuoyTracker(Node):
         # ROS2 subscribers & publishers
         self.subscription = self.create_subscription(
             Image,
-            '/bluerov2/camera/image',  # This is the topic your camera publisher uses
+            # '/bluerov2/camera/image',  # This is the topic your camera publisher uses
+            'video_topic',
             self.image_callback,
             10
         )
@@ -279,6 +280,8 @@ class BuoyTracker(Node):
 
             if self.get_hsv:
                 self.lower_hsv, self.upper_hsv = self.get_hsv_bounds()
+                print("Lower HSV: ", self.lower_hsv)
+                print("Upper HSV: ", self.upper_hsv)
                 self.get_hsv = False
 
             if self.set_desired_point:
@@ -322,10 +325,13 @@ class BuoyTracker(Node):
             self.error = []
             self.error.extend([x - self.mouseX, y - self.mouseY])
             self.error= self.convertListPoint2meter(self.error)
+            if self.area < 1e-3:
+                self.area = 1e-3
+            # print("Area: ", self.area)
             self.depth = self.buoy_size*self.lx/self.area 
             # self.buoy_size = 1*self.area/self.lx
             # print("buoy size: ", self.buoy_size)
-            # print("Depth: ", self.depth)
+            print("Depth: ", self.depth)
             depth_err = self.depth - self.z_des
             depth_err = self.convert2meter((depth_err,0), self.u0, self.v0, self.lx, self.ly)[0]
 
