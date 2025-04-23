@@ -50,7 +50,7 @@ class BuoyTracker(Node):
         self.publisher_velocity = self.create_publisher(Twist, 'camera_velocity', 10)
 
         # pub robot velocity
-        self.publisher_robot_velocity = self.create_publisher(Twist, 'robot_velocity', 10)
+        self.publisher_robot_velocity = self.create_publisher(Twist, 'visual_tracker', 10)
 
         # OpenCV Bridge
         self.bridge = CvBridge()
@@ -321,11 +321,13 @@ class BuoyTracker(Node):
 
             self.error = []
             self.error.extend([x - self.mouseX, y - self.mouseY])
+            self.error= self.convertListPoint2meter(self.error)
             self.depth = self.buoy_size*self.lx/self.area 
             # self.buoy_size = 1*self.area/self.lx
             # print("buoy size: ", self.buoy_size)
             # print("Depth: ", self.depth)
             depth_err = self.depth - self.z_des
+            depth_err = self.convert2meter((depth_err,0), self.u0, self.v0, self.lx, self.ly)[0]
 
             L  = self.interaction_matrix((x, y),self.depth)
             v_cam = self.compute_camera_velocity(L,self.error,depth_err)
