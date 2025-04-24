@@ -22,7 +22,7 @@ class BuoyTracker(Node):
         self.ly = 455 # focal length/ pixel size
         self.kud = 0.00683 
         self.kdu = -0.01424
-
+        self.depth= 0
         self.get_hsv = False
         self.set_desired_point = False
         self.set_desired_area = False
@@ -35,7 +35,7 @@ class BuoyTracker(Node):
         
         # self.z_ref = 1
         self.area_ref = 6000
-        self.buoy_size = 22 # Size of the buoy in meters
+        self.buoy_size = 3.15 # Size of the buoy in meters
         self.z_des = 0.5  # Desired depth in meters
 
         # ROS2 subscribers & publishers
@@ -141,9 +141,7 @@ class BuoyTracker(Node):
     def interaction_matrix (self, point, depth):
         L = []
 
-        Z = 1
-        if Z < 0.001:
-            Z = 0.001
+        Z = 1 # max(depth, 0.001)
         x,y  = self.convert2meter(point, self.u0, self.v0, self.lx, self.ly)
         
         L =  np.array([
@@ -153,11 +151,11 @@ class BuoyTracker(Node):
 
         return np.vstack(L)
     
-    def compute_camera_velocity(self, L, error, depth_err, lambda_gain=0.5):
+    def compute_camera_velocity(self, L, error, depth_err, lambda_gain=1):
         L_pinv = np.linalg.pinv(L)  # Moore-Penrose pseudo-inverse
         # Compute velocity command
         velocity = -lambda_gain * L_pinv @ error
-        v_z = -lambda_gain * depth_err
+        v_z = lambda_gain * depth_err
         velocity[2] = v_z  # Set the vertical velocity to the computed depth error
         return velocity
     
@@ -277,6 +275,9 @@ class BuoyTracker(Node):
 
             # Convert ROS2 image to OpenCV format
             self.frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            #self.get_logger().info(f'depth = {self.depth}')
+            
+
 
             if self.get_hsv:
                 self.lower_hsv, self.upper_hsv = self.get_hsv_bounds()
@@ -324,19 +325,25 @@ class BuoyTracker(Node):
 
             self.error = []
             self.error.extend([x - self.mouseX, y - self.mouseY])
-            self.error= self.convertListPoint2meter(self.error)
-            if self.area < 1e-3:
-                self.area = 1e-3
-            # print("Area: ", self.area)
-            self.depth = self.buoy_size*self.lx/self.area 
-            # self.buoy_size = 1*self.area/self.lx
+            #self.error= self.convertListPoint2meter(self.error)
+            self.get_logger().error(f"error: {self.error}")
+            if self.area < 1e-9:
+                self.area = 1e-9
+            
+            #self.get_logger().info(f'{self.area}')
+            self.depth = np.sqrt(3000/ self.area)
+            
             # print("buoy size: ", self.buoy_size)
-            print("Depth: ", self.depth)
+            #print("Depth: ", self.depth)
             depth_err = self.depth - self.z_des
-            depth_err = self.convert2meter((depth_err,0), self.u0, self.v0, self.lx, self.ly)[0]
+            #depth_err = self.convert2meter((depth_err,0), self.u0, self.v0, self.lx, self.ly)[0]
 
             L  = self.interaction_matrix((x, y),self.depth)
-            v_cam = self.compute_camera_velocity(L,self.error,depth_err)
+            self.get_logger().error(f"interaction matrix: {L}")
+            v_cam = self.compute_camera_velocity(L,self.error,depth_err,lambda_gain=0.3)
+            self.get_logger().error(f"cam vel: {v_cam}")
+
+
             # print("Velocity in camera frame: ", v_cam)
             # publish camera velocity
             velocity_msg = Twist()

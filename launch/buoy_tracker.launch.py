@@ -21,7 +21,7 @@ def generate_launch_description():
         ),
         # PlotJuggler as a process
         ExecuteProcess(
-            cmd=['plotjuggler', '--layout', './visual_tracking_layout.xml'],
+            cmd=['plotjuggler', '--layout', '/home/anas/colcon_ws/src/object_tracking/visual_tracking_layout.xml'],
             output='screen'
         )
     ])
