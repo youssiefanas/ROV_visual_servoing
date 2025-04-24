@@ -71,6 +71,29 @@ class BuoyTracker(Node):
         cv2.namedWindow("Buoy Tracking")
         cv2.setMouseCallback("Buoy Tracking", self.click_detect)
 
+        # TODO: reconfigurable param for lambda gain
+        # declare and set params
+        # add in set parameters callback
+
+        # create parameter callback
+        self.config = {}
+        self.declare_and_set_params()
+        self.add_on_set_parameters_callback(self.set_parameters_callback)
+
+    def update_parameters(self):
+        
+        pass
+    
+    def set_parameters_callback(self, params):
+        pass
+
+    def declare_and_set_params(self):
+        pass
+
+    def _declare_and_fill_map(self, key, value, description, map):
+        pass
+
+        
     # def set_hsv_thresholds(self):
     #     # Access HSV parameters using .get_parameter_value().get_parameter_value()
     #     lower_hsv_param = self.get_parameter('lower_hsv').get_parameter_value().integer_array_value
@@ -235,7 +258,11 @@ class BuoyTracker(Node):
         :param t: 3x1 translation vector (camera origin w.r.t robot frame, expressed in camera frame)
         :return: v_robot: (6,) numpy array
         """
-        x, y, z = np.array([0.172, 0, 0.03])
+
+        # TODO: check rotation matrix and translation vector
+
+        # x, y, z = np.array([0.172, 0, 0.03])
+        x, y, z = np.array([0.0, 0.03, 0.172])
 
         skew = np.array([
         [0, -z, y],
@@ -243,12 +270,26 @@ class BuoyTracker(Node):
         [-y, x, 0]
         ])
 
-        
+        # 1st choice
         R = np.array([
            [ 0, 0, 1],
            [-1,0,0],
             [0, -1,0]
         ])
+
+        # 2nd choice
+        # R = np.array([
+        #    [ 0, 0, 1],
+        #    [1,0,0],
+        #     [0, 1,0]
+        # ])
+
+        # 3rd choice
+        # R = np.array([
+        #    [ 0, -1, 0],
+        #    [0,0,-1],
+        #     [1, 0,0]
+        # ])
 
         v_c_lin = v_camera[:3]
         v_c_ang = v_camera[3:]
