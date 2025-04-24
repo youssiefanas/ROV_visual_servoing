@@ -309,12 +309,12 @@ class BuoyTracker(Node):
         #     [1, 0,0]
         # ])
 
-        v_c_lin = v_camera[:3]
-        v_c_ang = v_camera[3:]
-
         # Build 6x6 transformation matrix
         upper = np.hstack((R, np.zeros((3,3))))
         lower = np.hstack((skew @ R, R))
+
+        # upper = np.hstack((R, skew@R))
+        # lower = np.hstack((np.zeros((3,3)), R))
         T = np.vstack((upper, lower))  # 6x6 matrix
 
         v_robot = T @ v_camera
@@ -377,17 +377,13 @@ class BuoyTracker(Node):
                     # print("Area: ", self.area)
                 
 
-            # Publish center coordinates
-            msg = Float64MultiArray()
-            msg.data = [float(x), float(y), float(self.area)]
-            self.publisher.publish(msg)
+            if self.area < 1e-9:
+                self.area = 1e-9
 
             self.error = []
             self.error.extend([x - self.mouseX, y - self.mouseY])
             #self.error= self.convertListPoint2meter(self.error)
             self.get_logger().error(f"error: {self.error}")
-            if self.area < 1e-9:
-                self.area = 1e-9
             
             #self.get_logger().info(f'{self.area}')
             self.depth = np.sqrt(3000/ self.area)
@@ -396,6 +392,11 @@ class BuoyTracker(Node):
             #print("Depth: ", self.depth)
             depth_err = self.depth - self.z_des
             #depth_err = self.convert2meter((depth_err,0), self.u0, self.v0, self.lx, self.ly)[0]
+
+            # Publish center coordinates
+            msg = Float64MultiArray()
+            msg.data = [float(x - self.mouseX), float(y-self.mouseY), float(depth_err)]
+            self.publisher.publish(msg)
 
             L  = self.interaction_matrix((x, y),self.depth)
             self.get_logger().error(f"interaction matrix: {L}")
