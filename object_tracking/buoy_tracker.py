@@ -77,7 +77,7 @@ class BuoyTracker(Node):
         # add in set parameters callback
 
         self.lambda_gain = 0.3
-        self.thruster_gain = 0.5
+        self.thruster_gain = 1.0
 
         # create parameter callback
         self.config = {}
@@ -87,7 +87,8 @@ class BuoyTracker(Node):
     def update_parameters(self):
         self.lambda_gain = float(self.config.get('lambda_gain', 0.3))
         self.get_logger().info(f">>>>>>>>>>>>>>>>>>>>>>>>>>> lambda_gain updated to: {self.lambda_gain}")
-
+        self.thruster_gain = float(self.config.get('thruster_gain', 1.0))
+        self.get_logger().info(f"=========================== thruster_gain updated to: {self.thruster_gain}")
     
     def set_parameters_callback(self, params):
         for param in params:
@@ -99,6 +100,7 @@ class BuoyTracker(Node):
     def declare_and_set_params(self):
         # declare
         self._declare_and_fill_map('lambda_gain', 0.3, 'lambda gain for camera velocity', self.config)
+        self._declare_and_fill_map('thruster_gain', 1.0, 'thruster gain for the robot velocity', self.config)
 
         self.update_parameters()
         # pass
@@ -107,7 +109,7 @@ class BuoyTracker(Node):
         param = self.declare_parameter(
             key, val, ParameterDescriptor(description=description))
         map[key] = param.value
-        pass
+        # pass
 
         
     # def set_hsv_thresholds(self):
@@ -420,12 +422,12 @@ class BuoyTracker(Node):
 
             # publish robot velocity
             robot_velocity_msg = Twist()
-            robot_velocity_msg.linear.x = robot_vel[0]
-            robot_velocity_msg.linear.y = robot_vel[1]
-            robot_velocity_msg.linear.z = robot_vel[2]
-            robot_velocity_msg.angular.x = robot_vel[3]
-            robot_velocity_msg.angular.y = robot_vel[4]
-            robot_velocity_msg.angular.z = robot_vel[5]
+            robot_velocity_msg.linear.x = self.thruster_gain * robot_vel[0]
+            robot_velocity_msg.linear.y = self.thruster_gain * robot_vel[1]
+            robot_velocity_msg.linear.z = self.thruster_gain * robot_vel[2]
+            robot_velocity_msg.angular.x = self.thruster_gain * robot_vel[3]
+            robot_velocity_msg.angular.y = self.thruster_gain * robot_vel[4]
+            robot_velocity_msg.angular.z = self.thruster_gain * robot_vel[5]
             
             self.publisher_robot_velocity.publish(robot_velocity_msg)
 
