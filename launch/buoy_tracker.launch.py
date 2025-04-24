@@ -1,27 +1,38 @@
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, ExecuteProcess
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-from launch.actions import ExecuteProcess
 
 def generate_launch_description():
+    plot_flag = LaunchConfiguration('plot')
+
     return LaunchDescription([
-        # Your ROS 2 node
+        # Declare the launch argument
+        DeclareLaunchArgument(
+            'plot',
+            default_value='false',
+            description='Launch PlotJuggler if true'
+        ),
+
+        # ROS 2 nodes
         Node(
             package='object_tracking',
             executable='buoy_tracker',
             name='buoy_tracker',
             output='screen'
         ),
-
         Node(
-            #             'video_publisher = object_tracking.video_publisher:main',  # ✅ Ensure this line is here
             package='object_tracking',
             executable='video_publisher',
             name='video_publisher',
             output='log',
         ),
-        # PlotJuggler as a process
+
+        # Conditional execution of PlotJuggler
         ExecuteProcess(
-            cmd=['plotjuggler', '--layout', '/home/anas/colcon_ws/src/object_tracking/visual_tracking_layout.xml'],
-            output='screen'
+            cmd=['plotjuggler', '--layout', './visual_tracking_layout.xml'],
+            output='screen',
+            condition=IfCondition(plot_flag)
         )
     ])
