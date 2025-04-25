@@ -37,7 +37,7 @@ class ArucoStatsPublisher(Node):
 
         # ArUco detector setup
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_50)
-        self.aruco_params = cv2.aruco.DetectorParameters()
+        self.aruco_params = cv2.aruco.DetectorParameters_create()
 
         # Parameters
         self.lambda_gain = 0.1

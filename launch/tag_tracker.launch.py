@@ -18,16 +18,16 @@ def generate_launch_description():
         # ROS 2 nodes
         Node(
             package='object_tracking',
-            executable='buoy_tracker',
-            name='buoy_tracker',
+            executable='tag_tracker',
+            name='tag_tracker',
             output='screen'
         ),
-        # Node(
-        #     package='object_tracking',
-        #     executable='video_publisher',
-        #     name='video_publisher',
-        #     output='log',
-        # ),
+        Node(
+            package='object_tracking',
+            executable='video_publisher',
+            name='video_publisher',
+            output='log',
+        ),
 
         # Conditional execution of PlotJuggler
         ExecuteProcess(

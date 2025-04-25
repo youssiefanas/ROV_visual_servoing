@@ -42,8 +42,8 @@ class BuoyTracker(Node):
         # ROS2 subscribers & publishers
         self.subscription = self.create_subscription(
             Image,
-            # '/bluerov2/camera/image',  # This is the topic your camera publisher uses
-            'video_topic',
+            '/bluerov2/camera/image',  # This is the topic your camera publisher uses
+            # 'video_topic',
             self.image_callback,
             10
         )
@@ -52,7 +52,7 @@ class BuoyTracker(Node):
         self.publisher_velocity = self.create_publisher(Twist, 'camera_velocity', 10)
 
         # pub robot velocity
-        self.publisher_robot_velocity = self.create_publisher(Twist, 'visual_tracker', 10)
+        self.publisher_robot_velocity = self.create_publisher(Twist, '/bluerov2/visual_tracker', 10)
 
         # OpenCV Bridge
         self.bridge = CvBridge()
@@ -76,8 +76,8 @@ class BuoyTracker(Node):
         # declare and set params
         # add in set parameters callback
 
-        self.lambda_gain = 0.3
-        self.thruster_gain = 1.0
+        self.lambda_gain = 0.5
+        self.thruster_gain = 0.5
 
         # create parameter callback
         self.config = {}
@@ -85,9 +85,9 @@ class BuoyTracker(Node):
         self.add_on_set_parameters_callback(self.set_parameters_callback)
 
     def update_parameters(self):
-        self.lambda_gain = float(self.config.get('lambda_gain', 0.3))
+        self.lambda_gain = float(self.config.get('lambda_gain', 0.5))
         self.get_logger().info(f">>>>>>>>>>>>>>>>>>>>>>>>>>> lambda_gain updated to: {self.lambda_gain}")
-        self.thruster_gain = float(self.config.get('thruster_gain', 1.0))
+        self.thruster_gain = float(self.config.get('thruster_gain', 0.5))
         self.get_logger().info(f"=========================== thruster_gain updated to: {self.thruster_gain}")
     
     def set_parameters_callback(self, params):
@@ -99,8 +99,8 @@ class BuoyTracker(Node):
 
     def declare_and_set_params(self):
         # declare
-        self._declare_and_fill_map('lambda_gain', 0.3, 'lambda gain for camera velocity', self.config)
-        self._declare_and_fill_map('thruster_gain', 1.0, 'thruster gain for the robot velocity', self.config)
+        self._declare_and_fill_map('lambda_gain', 0.5, 'lambda gain for camera velocity', self.config)
+        self._declare_and_fill_map('thruster_gain', 0.5, 'thruster gain for the robot velocity', self.config)
 
         self.update_parameters()
         # pass
@@ -289,18 +289,18 @@ class BuoyTracker(Node):
         ])
 
         # 1st choice
-        R = np.array([
-           [ 0, 0, 1],
-           [-1,0,0],
-            [0, -1,0]
-        ])
-
-        # 2nd choice
         # R = np.array([
         #    [ 0, 0, 1],
-        #    [1,0,0],
-        #     [0, 1,0]
+        #    [-1,0,0],
+        #     [0, -1,0]
         # ])
+
+        # 2nd choice
+        R = np.array([
+           [ 0, 0, 1],
+           [1,0,0],
+            [0, 1,0]
+        ])
 
         # 3rd choice
         # R = np.array([
@@ -310,11 +310,11 @@ class BuoyTracker(Node):
         # ])
 
         # Build 6x6 transformation matrix
-        upper = np.hstack((R, np.zeros((3,3))))
-        lower = np.hstack((skew @ R, R))
+        # upper = np.hstack((R, np.zeros((3,3))))
+        # lower = np.hstack((skew @ R, R))
 
-        # upper = np.hstack((R, skew@R))
-        # lower = np.hstack((np.zeros((3,3)), R))
+        upper = np.hstack((R, skew@R))
+        lower = np.hstack((np.zeros((3,3)), R))
         T = np.vstack((upper, lower))  # 6x6 matrix
 
         v_robot = T @ v_camera
@@ -322,6 +322,7 @@ class BuoyTracker(Node):
     
 
     def image_callback(self, msg):
+        self.get_logger().info("Received image")
         try:
             
             """
@@ -395,8 +396,14 @@ class BuoyTracker(Node):
 
             # Publish center coordinates
             msg = Float64MultiArray()
-            msg.data = [float(x - self.mouseX), float(y-self.mouseY), float(depth_err)]
-            self.publisher.publish(msg)
+            msg.data = [float(x - self.mouseX), float(y-self.mouseY), float(depth_err), float(x), float(y)]
+            # current position of the buoy
+            # msg.dat
+
+
+            self.publisher.publish(msg) # current pose oof the buoy
+
+
 
             L  = self.interaction_matrix((x, y),self.depth)
             self.get_logger().error(f"interaction matrix: {L}")
