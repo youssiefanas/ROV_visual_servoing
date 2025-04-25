@@ -28,20 +28,20 @@ class ArucoStatsPublisher(Node):
 
         # ROS publishers and subscribers
         self.bridge = CvBridge()
-        self.image_sub = self.create_subscription(Image, '/video_topic', self.image_callback, 10)
+        self.image_sub = self.create_subscription(Image, '/bluerov2/camera/image', self.image_callback, 10)
         self.image_pub = self.create_publisher(Image, '/tagged_frames', 10)
         self.stats_pub = self.create_publisher(Float32MultiArray, '/aruco_stats', 10)
         self.publisher_velocity = self.create_publisher(Twist, 'camera_velocity', 10)
-        self.publisher_robot_velocity = self.create_publisher(Twist, 'visual_tracker', 10)
+        self.publisher_robot_velocity = self.create_publisher(Twist, '/bluerov2/visual_tracker', 10)
         self.publisher = self.create_publisher(Float64MultiArray, 'tracked_point', 10)
 
         # ArUco detector setup
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_50)
-        self.aruco_params = cv2.aruco.DetectorParameters_create()
+        self.aruco_params = cv2.aruco.DetectorParameters()
 
         # Parameters
-        self.lambda_gain = 0.1
-        self.thruster_gain = 1.0
+        self.lambda_gain = 0.5
+        self.thruster_gain = 0.5
         self.config = {}
         self.declare_and_set_params()
         self.add_on_set_parameters_callback(self.set_parameters_callback)
@@ -59,9 +59,9 @@ class ArucoStatsPublisher(Node):
         self.camera_to_robot_translation = np.array([0.0, 0.03, 0.172])
 
     def update_parameters(self):
-        self.lambda_gain = float(self.config.get('lambda_gain', 0.3))
+        self.lambda_gain = float(self.config.get('lambda_gain', 0.5))
         self.get_logger().info(f">>>>>>>>>>>>>>>>>>>>>>>>>>> lambda_gain updated to: {self.lambda_gain}")
-        self.thruster_gain = float(self.config.get('thruster_gain', 1.0))
+        self.thruster_gain = float(self.config.get('thruster_gain', 0.5))
         self.get_logger().info(f"=========================== thruster_gain updated to: {self.thruster_gain}")
     
     def set_parameters_callback(self, params):
@@ -73,8 +73,8 @@ class ArucoStatsPublisher(Node):
 
     def declare_and_set_params(self):
         # declare
-        self._declare_and_fill_map('lambda_gain', 0.3, 'lambda gain for camera velocity', self.config)
-        self._declare_and_fill_map('thruster_gain', 1.0, 'thruster gain for the robot velocity', self.config)
+        self._declare_and_fill_map('lambda_gain', 0.5, 'lambda gain for camera velocity', self.config)
+        self._declare_and_fill_map('thruster_gain', 0.5, 'thruster gain for the robot velocity', self.config)
 
         self.update_parameters()
         # pass
@@ -163,18 +163,18 @@ class ArucoStatsPublisher(Node):
         ])
 
         # 1st choice
-        R = np.array([
-           [ 0, 0, 1],
-           [-1,0,0],
-            [0, -1,0]
-        ])
-
-        # 2nd choice
         # R = np.array([
         #    [ 0, 0, 1],
-        #    [1,0,0],
-        #     [0, 1,0]
+        #    [-1,0,0],
+        #     [0, -1,0]
         # ])
+
+        # 2nd choice
+        R = np.array([
+           [ 0, 0, 1],
+           [1,0,0],
+            [0, 1,0]
+        ])
 
         # 3rd choice
         # R = np.array([
@@ -234,7 +234,7 @@ class ArucoStatsPublisher(Node):
                 cv2.circle(frame, (int(cx), int(cy)), 5, color, -1)
 
             # Filter for specific IDs and build output message
-            desired_ids = {1, 2, 9}
+            desired_ids = {1, 3,7}
             selected = [s for s in stats if s[3] in desired_ids]
             self.selected_points = selected
             msg_out = Float32MultiArray()

@@ -17,8 +17,8 @@ class BuoyTracker(Node):
         # self.declare_parameter('upper_hsv', [33, 220, 255]) #buoy red  # Default: [179, 255, 255] # pablo bottle
         self.lower_hsv = np.array([0, 144, 117], dtype=np.uint8)
         self.upper_hsv = np.array([33, 220, 255], dtype=np.uint8)
-        self.u0 = 320 # principle point
-        self.v0 = 240 # principle point
+        self.u0 = 500 # principle point
+        self.v0 = 275 # principle point
         self.lx = 455 # focal length/ pixel size
         self.ly = 455 # focal length/ pixel size
         self.kud = 0.00683 
@@ -195,9 +195,13 @@ class BuoyTracker(Node):
     def compute_camera_velocity(self, L, error, depth_err, lambda_gain=1):
         L_pinv = np.linalg.pinv(L)  # Moore-Penrose pseudo-inverse
         # Compute velocity command
-        velocity = -lambda_gain * L_pinv @ error
+        velocity = - L_pinv @ error
         v_z = lambda_gain * depth_err
         velocity[2] = v_z  # Set the vertical velocity to the computed depth error
+        # linear velocity gain 
+        velocity[0:2] = 0.5 * velocity[0:2]
+        # angular velocity gain
+        velocity[3:6] = lambda_gain * velocity[3:6]
         return velocity
     
             
@@ -431,7 +435,7 @@ class BuoyTracker(Node):
             # publish robot velocity
             robot_velocity_msg = Twist()
             robot_velocity_msg.linear.x = self.thruster_gain * robot_vel[0]
-            robot_velocity_msg.linear.y = self.thruster_gain * robot_vel[1]
+            robot_velocity_msg.linear.y = 0.5 * robot_vel[1]
             robot_velocity_msg.linear.z = self.thruster_gain * robot_vel[2]
             robot_velocity_msg.angular.x = self.thruster_gain * robot_vel[3]
             robot_velocity_msg.angular.y = self.thruster_gain * robot_vel[4]
