@@ -1,9 +1,5 @@
 # ROV_visual_servoing
 
-Got it! Here’s a more **technical, to-the-point README section** for the `buoy_tracker.py` ROS 2 node, explaining the main functions and structure for a robotics/software audience:
-
----
-
 ## Buoy Tracker Node (`buoy_tracker.py`)
 
 ### Overview
