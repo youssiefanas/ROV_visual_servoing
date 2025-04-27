@@ -6,7 +6,6 @@
 
 This ROS 2 node implements real-time visual tracking and servoing for an underwater robot (ROV) by detecting a colored buoy using a camera. It processes camera images, extracts the buoy’s position and area, computes visual servoing control commands, and publishes velocity commands for autonomous target following.
 
-
 ### ROS Topics
 
 - **Subscriptions**
@@ -35,11 +34,6 @@ This ROS 2 node implements real-time visual tracking and servoing for an underwa
 - `lower_hsv`, `upper_hsv`: HSV bounds for color tracking (can be dynamically set).
 - `lambda_gain`: Control gain for visual servoing.
 - `thruster_gain`: Gain for scaling output robot velocities.
-
-
-Absolutely! Here’s a technical, concise README section for your ArUco visual servoing node, suitable for ROS developers and robotics researchers:
-
----
 
 ## ArUco Stats Publisher Node (`aruco_stats_publisher.py`)
 
