@@ -13,7 +13,7 @@ TOPICS = [
 ]
 
 def find_rosbags(base_dir):
-    """Recursively finds all ROS2 bag files in subdirectories."""
+    """Recursively finds all ROS2 bag files (.db3) in subdirectories."""
     bag_files = []
     for root, _, files in os.walk(base_dir):
         for file in files:
@@ -56,23 +56,26 @@ def read_rosbag_to_dataframe(bag_path, topics):
 
     return df_dict
 
-def process_all_rosbags(base_dir):
-    """Processes all found ROS bags, extracts data, and saves CSVs in their respective folders."""
-    bag_files = find_rosbags(base_dir)
-    
+def process_all_rosbags():
+    """Processes all found ROS bags in 'rosbag/' and saves CSVs in 'rosbag_data/<bag_name>/'."""
+    rosbag_dir = os.path.join(os.getcwd(), "rosbag")
+    result_root = os.path.join(os.getcwd(), "rosbag_data")
+    bag_files = find_rosbags(rosbag_dir)
+
     for bag_file in bag_files:
         df_dict = read_rosbag_to_dataframe(bag_file, TOPICS)
-        bag_dir = os.path.dirname(bag_file)  # Folder where the bag is located
+        bag_name = os.path.splitext(os.path.basename(bag_file))[0]
+        out_dir = os.path.join(result_root, bag_name)
+        os.makedirs(out_dir, exist_ok=True)
 
         for topic, df in df_dict.items():
             try:
                 filename = f"{topic.replace('/', '_')}.csv"
-                file_path = os.path.join(bag_dir, filename)
+                file_path = os.path.join(out_dir, filename)
                 df.to_csv(file_path, index=False)
                 print(f"Saved CSV: {file_path}")
             except Exception as e:
                 print(f"Error saving topic '{topic}' to CSV: {e}")
 
 if __name__ == '__main__':
-    base_directory = os.getcwd()  # Change this to your base directory if needed
-    process_all_rosbags(base_directory)
+    process_all_rosbags()
