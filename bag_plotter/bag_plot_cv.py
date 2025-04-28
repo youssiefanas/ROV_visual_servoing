@@ -15,10 +15,17 @@ def parse_vector3(s):
     else:
         return np.nan, np.nan, np.nan
 
-def plot_vector3(df, save_base):
-    """Generate and save the linear/angular velocity plot as PDF and PNG."""
-    plt.figure(figsize=(12, 7))
+def plot_vector3(df, bag_name):
+    """Generate and save the linear/angular velocity plot as PDF and PNG into per-bag pdf/png folders."""
+    base_dir = os.getcwd()
+    pdf_dir = os.path.join(base_dir, "plot_result", bag_name, "pdf")
+    png_dir = os.path.join(base_dir, "plot_result", bag_name, "png")
+    os.makedirs(pdf_dir, exist_ok=True)
+    os.makedirs(png_dir, exist_ok=True)
+    pdf_path = os.path.join(pdf_dir, "camera_velocity.pdf")
+    png_path = os.path.join(png_dir, "camera_velocity.png")
 
+    plt.figure(figsize=(12, 7))
     plt.plot(df["Time"], df["linear_x"], label="Linear X", linewidth=2)
     plt.plot(df["Time"], df["linear_y"], label="Linear Y", linewidth=2)
     plt.plot(df["Time"], df["linear_z"], label="Linear Z", linewidth=2)
@@ -28,17 +35,14 @@ def plot_vector3(df, save_base):
 
     plt.xlabel("Time [s]", fontsize=20)
     plt.ylabel("Value", fontsize=20)
-    #plt.title("Camera Linear and Angular Velocity Over Time", fontsize=18)
-    plt.tick_params(axis='both', which='major', labelsize=16)  # <-- This sets axis number font size
+    plt.tick_params(axis='both', which='major', labelsize=16)
     plt.legend(fontsize=15)
     plt.grid(True)
     plt.tight_layout()
-
-    # Save plots
-    plt.savefig(f"{save_base}.pdf")
-    plt.savefig(f"{save_base}.png", dpi=300)
+    plt.savefig(pdf_path)
+    plt.savefig(png_path, dpi=300)
     plt.close()
-    print(f"Saved plots: {save_base}.pdf and {save_base}.png")
+    print(f"Saved plots: {pdf_path} and {png_path}")
 
 def process_camera_velocity_csv(csv_path):
     """Read, process, and plot data from the camera velocity CSV."""
@@ -48,28 +52,31 @@ def process_camera_velocity_csv(csv_path):
     df["Time"] = (df["timestamp"] - df["timestamp"].min()) / 1e9
     return df
 
-def find_folders_with_csv(base_dir, csv_name):
-    """Find all subfolders with the target CSV file."""
-    folders = []
+def find_camera_csvs(base_dir):
+    """Find all _camera_velocity.csv files and their bag_name."""
+    result = []
     for root, _, files in os.walk(base_dir):
-        if csv_name in files:
-            folders.append(root)
-    return folders
+        if CSV_NAME in files:
+            # Expect path: <cwd>/rosbag_data/<bag_name>/<CSV_NAME>
+            path_parts = os.path.normpath(root).split(os.sep)
+            try:
+                bag_idx = path_parts.index('rosbag_data') + 1
+                bag_name = path_parts[bag_idx]
+            except Exception:
+                bag_name = "unknown"
+            csv_path = os.path.join(root, CSV_NAME)
+            result.append((csv_path, bag_name))
+    return result
 
-def process_all_folders(base_dir):
-    folders = find_folders_with_csv(base_dir, CSV_NAME)
-    for folder in folders:
-        csv_path = os.path.join(folder, CSV_NAME)
-        plot_dir = os.path.join(folder, "plot")
-        os.makedirs(plot_dir, exist_ok=True)  # Create the 'plot' folder if it doesn't exist
-        plot_base = os.path.join(plot_dir, "camera_velocity")  # Plots will be named "camera_velocity.pdf/png" inside 'plot'
-
+def process_all_camera_csvs():
+    base_dir = os.path.join(os.getcwd(), "rosbag_data")
+    csvs = find_camera_csvs(base_dir)
+    for csv_path, bag_name in csvs:
         try:
             df = process_camera_velocity_csv(csv_path)
-            plot_vector3(df, plot_base)
+            plot_vector3(df, bag_name)
         except Exception as e:
-            print(f"Error in {folder}: {e}")
+            print(f"Error processing {csv_path}: {e}")
 
 if __name__ == '__main__':
-    base_directory = os.getcwd()
-    process_all_folders(base_directory)
+    process_all_camera_csvs()
