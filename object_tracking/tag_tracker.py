@@ -7,7 +7,7 @@ from cv_bridge import CvBridge
 import cv2
 import numpy as np
 from geometry_msgs.msg import Twist
-from rcl_interfaces.msg import ParameterDescriptor, SetParametersResult
+from rcl_interfaces.msg import ParameterDescriptor, SetParametersResult,FloatingPointRange
 
 
 class ArucoStatsPublisher(Node):
@@ -47,8 +47,14 @@ class ArucoStatsPublisher(Node):
         
         # Declare all parameters with descriptive names
         for dof in self.dof_names:
-            self.declare_parameter(f'{dof}_gain', 0.0)
-        
+            float_range = FloatingPointRange(from_value=-1.0, to_value=1.0, step=0.0001)
+            self.declare_parameter(f'{dof}_gain', 0.0, ParameterDescriptor(
+                description= 'slider control gain for ' + dof,
+                read_only=False,
+                floating_point_range= [float_range],
+                additional_constraints= 'must be between -1.0 and 1.0'
+            ))
+
         # Set up parameter callback
         self.add_on_set_parameters_callback(self.parameter_callback)
         self.update_matrix_from_params()
@@ -59,12 +65,12 @@ class ArucoStatsPublisher(Node):
         cv2.setMouseCallback("ArUco Tag Tracker", self.click_detect)
 
         # Transformation constants
-        self.camera_to_robot_rotation = np.array([
-            [0, 0, 1],
-            [-1, 0, 0],
-            [0, -1, 0]
-        ])
-        self.camera_to_robot_translation = np.array([0.0, 0.03, 0.172])
+        # self.camera_to_robot_rotation = np.array([
+        #     [0, 0, 1],
+        #     [-1, 0, 0],
+        #     [0, -1, 0]
+        # ])
+        # self.camera_to_robot_translation = np.array([0.0, 0.03, 0.172])
 
     def parameter_callback(self, params):
         """Handle parameter updates"""
@@ -282,7 +288,7 @@ class ArucoStatsPublisher(Node):
                     # self.get_logger().info(f"Interaction matrix L: {L}")
                     # Compute errors
                     errors = np.array(errors)
-                    self.get_logger().info(f"Errors: {errors}")
+                    # self.get_logger().info(f"Errors: {errors}")
 
                     # Compute velocity
                     v_camera = self.compute_velocity(L, errors)
@@ -305,7 +311,7 @@ class ArucoStatsPublisher(Node):
                     # Publish robot velocity
                     msg_out_robot = Twist()
                     # limit the velocity to -1, 1
-                    v_robot = np.clip(v_robot, -1, 1)
+                    v_robot = np.clip(v_robot, -0.5, 0.5)
                     self.get_logger().info(f"v_robot: {v_robot}")
                     msg_out_robot.linear.x = v_robot[0] #* self.thruster_gain
                     msg_out_robot.linear.y = v_robot[1] #* self.thruster_gain
