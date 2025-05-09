@@ -6,7 +6,7 @@ from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float64MultiArray
 from geometry_msgs.msg import Twist
-from rcl_interfaces.msg import ParameterDescriptor, SetParametersResult
+from rcl_interfaces.msg import ParameterDescriptor, SetParametersResult, FloatingPointRange
 
 class BuoyTracker(Node):
     def __init__(self):
@@ -33,7 +33,7 @@ class BuoyTracker(Node):
         self.rect_y1 = 0
         self.rect_x2 = 0
         self.rect_y2 = 0
-        
+        self.desired_area = 0
         # self.z_ref = 1
         self.area_ref = 6000
         self.buoy_size = 3.15 # Size of the buoy in meters
@@ -76,39 +76,82 @@ class BuoyTracker(Node):
         # declare and set params
         # add in set parameters callback
 
-        self.lambda_gain = 0.5
-        self.thruster_gain = 0.5
+        
+        # Parameters
+        self.gain_matrix = np.eye(6)  # Identity matrix
+        
+        # Define DoF names (linear first, then angular)
+        self.dof_names = ['surge', 'sway', 'heave', 'roll', 'pitch', 'yaw']
+        
+        # Declare all parameters with descriptive names
+        for dof in self.dof_names:
+            float_range = FloatingPointRange(from_value=-1.0, to_value=1.0, step=0.0001)
+            self.declare_parameter(f'{dof}_gain', 0.0, ParameterDescriptor(
+                description= 'slider control gain for ' + dof,
+                read_only=False,
+                floating_point_range= [float_range],
+                additional_constraints= 'must be between -1.0 and 1.0'
+            ))
+        
+        # Set up parameter callback
+        self.add_on_set_parameters_callback(self.parameter_callback)
+        self.update_matrix_from_params()
 
-        # create parameter callback
-        self.config = {}
-        self.declare_and_set_params()
-        self.add_on_set_parameters_callback(self.set_parameters_callback)
-
-    def update_parameters(self):
-        self.lambda_gain = float(self.config.get('lambda_gain', 0.5))
-        self.get_logger().info(f">>>>>>>>>>>>>>>>>>>>>>>>>>> lambda_gain updated to: {self.lambda_gain}")
-        self.thruster_gain = float(self.config.get('thruster_gain', 0.5))
-        self.get_logger().info(f"=========================== thruster_gain updated to: {self.thruster_gain}")
-    
-    def set_parameters_callback(self, params):
+    def parameter_callback(self, params):
+        """Handle parameter updates"""
         for param in params:
-            self.config[param.name] = param.value
-
-        self.update_parameters()
+            if param.name.endswith('_gain') and param.name.split('_')[0] in self.dof_names:
+                dof = param.name.split('_')[0]
+                idx = self.dof_names.index(dof)
+                self.gain_matrix[idx, idx] = param.value
+        
+        self.get_logger().info(f"Updated gains: {self.get_current_gains()}")
         return SetParametersResult(successful=True)
 
-    def declare_and_set_params(self):
-        # declare
-        self._declare_and_fill_map('lambda_gain', 0.5, 'lambda gain for camera velocity', self.config)
-        self._declare_and_fill_map('thruster_gain', 0.5, 'thruster gain for the robot velocity', self.config)
+    def update_matrix_from_params(self):
+        """Update all matrix elements from current parameters"""
+        for i, dof in enumerate(self.dof_names):
+            self.gain_matrix[i,i] = self.get_parameter(f'{dof}_gain').value
 
-        self.update_parameters()
-        # pass
 
-    def _declare_and_fill_map(self, key, val, description, map):
-        param = self.declare_parameter(
-            key, val, ParameterDescriptor(description=description))
-        map[key] = param.value
+    def get_current_gains(self):
+        """Return gains as a readable dict"""
+        return {dof: self.gain_matrix[i,i] for i, dof in enumerate(self.dof_names)}
+    
+
+        # self.lambda_gain = 0.5
+        # self.thruster_gain = 0.5
+
+        # create parameter callback
+    #     self.config = {}
+    #     self.declare_and_set_params()
+    #     self.add_on_set_parameters_callback(self.set_parameters_callback)
+
+    # def update_parameters(self):
+    #     self.lambda_gain = float(self.config.get('lambda_gain', 0.5))
+    #     self.get_logger().info(f">>>>>>>>>>>>>>>>>>>>>>>>>>> lambda_gain updated to: {self.lambda_gain}")
+    #     self.thruster_gain = float(self.config.get('thruster_gain', 0.5))
+    #     self.get_logger().info(f"=========================== thruster_gain updated to: {self.thruster_gain}")
+    
+    # def set_parameters_callback(self, params):
+    #     for param in params:
+    #         self.config[param.name] = param.value
+
+    #     self.update_parameters()
+    #     return SetParametersResult(successful=True)
+
+    # def declare_and_set_params(self):
+    #     # declare
+    #     self._declare_and_fill_map('lambda_gain', 0.5, 'lambda gain for camera velocity', self.config)
+    #     self._declare_and_fill_map('thruster_gain', 0.5, 'thruster gain for the robot velocity', self.config)
+
+    #     self.update_parameters()
+    #     # pass
+
+    # def _declare_and_fill_map(self, key, val, description, map):
+    #     param = self.declare_parameter(
+    #         key, val, ParameterDescriptor(description=description))
+    #     map[key] = param.value
         # pass
 
         
@@ -130,6 +173,7 @@ class BuoyTracker(Node):
             if event == cv2.EVENT_LBUTTONDOWN and flags != cv2.EVENT_FLAG_SHIFTKEY:
                 self.get_hsv = True
                 self.mouseX, self.mouseY = x, y
+                self.desired_area = self.area
                 print("update hsv",self.upper_hsv)
 
             # if flags == cv2.EVENT_FLAG_SHIFTKEY:
@@ -137,9 +181,10 @@ class BuoyTracker(Node):
             if event == cv2.EVENT_LBUTTONDOWN and flags == cv2.EVENT_FLAG_SHIFTKEY:
                 self.set_desired_point = True
                 self.mouseX, self.mouseY = x, y
-                self.z_des = self.depth
+                # self.z_des = self.depth
+                self.desired_area = self.area
                 # print("Desired point: ", self.mouseX, self.mouseY)
-                # print("Depth: ", self.depth)
+                print("Depth: ", self.desired_area)
             if event == cv2.EVENT_LBUTTONDOWN and flags == cv2.EVENT_FLAG_CTRLKEY:
                 self.set_desired_area = True
                 self.rect_x1, self.rect_y1 = x, y
@@ -179,29 +224,28 @@ class BuoyTracker(Node):
             point_meter = [self.convert2meter(pt, self.u0, self.v0, self.lx, self.ly) for pt in point_reshaped]
             return np.array(point_meter).reshape(-1)
     
-    def interaction_matrix (self, point, depth):
+    def interaction_matrix (self, point, area):
         L = []
 
-        Z = 1 # max(depth, 0.001)
+        Z = (float(area) - self.u0) / self.lx
         x,y  = self.convert2meter(point, self.u0, self.v0, self.lx, self.ly)
         
         L =  np.array([
         [self.lx * (-1/Z), 0, self.lx * (x/Z), self.lx * (x * y), -self.lx * (1 + x**2), self.lx * y],
-        [0, self.ly * (-1/Z), self.ly * (y/Z), self.ly * (1 + y**2), -self.ly * (x * y), -self.ly * x]])
+        [0, self.ly * (-1/Z), self.ly * (y/Z), self.ly * (1 + y**2), -self.ly * (x * y), -self.ly * x],
+        [0, 0, self.lx * (1/Z),0, 0, 0],
+        ])
         
 
         return np.vstack(L)
     
-    def compute_camera_velocity(self, L, error, depth_err, lambda_gain=1):
+    def compute_camera_velocity(self, L, error):
         L_pinv = np.linalg.pinv(L)  # Moore-Penrose pseudo-inverse
         # Compute velocity command
         velocity = - L_pinv @ error
-        v_z = lambda_gain * depth_err
-        velocity[2] = v_z  # Set the vertical velocity to the computed depth error
-        # linear velocity gain 
-        velocity[0:2] = 0.5 * velocity[0:2]
-        # angular velocity gain
-        velocity[3:6] = lambda_gain * velocity[3:6]
+        # v_z = depth_err
+        # velocity[2] = v_z  # Set the vertical velocity to the computed depth error
+    
         return velocity
     
             
@@ -326,7 +370,7 @@ class BuoyTracker(Node):
     
 
     def image_callback(self, msg):
-        self.get_logger().info("Received image")
+        # self.get_logger().info("Received image")
         try:
             
             """
@@ -351,7 +395,7 @@ class BuoyTracker(Node):
 
             if self.set_desired_point:
                 print("Desired point: ", self.desired_point())
-                print("Depth: ", self.depth)
+                print("Depth: ", self.desired_area)
                 self.set_desired_point = False
 
             # Convert to HSV
@@ -382,20 +426,21 @@ class BuoyTracker(Node):
                     # print("Area: ", self.area)
                 
 
-            if self.area < 1e-9:
-                self.area = 1e-9
+            # if self.area < 1e-9:
+            #     self.area = 1e-9
 
             self.error = []
-            self.error.extend([x - self.mouseX, y - self.mouseY])
             #self.error= self.convertListPoint2meter(self.error)
-            self.get_logger().error(f"error: {self.error}")
             
             #self.get_logger().info(f'{self.area}')
-            self.depth = np.sqrt(3000/ self.area)
+            # self.depth = np.sqrt(3000/ self.area)
             
             # print("buoy size: ", self.buoy_size)
             #print("Depth: ", self.depth)
-            depth_err = self.depth - self.z_des
+            depth_err = (self.area - self.desired_area)/100
+            self.error.extend([x - self.mouseX, y - self.mouseY, depth_err])
+            # self.get_logger().info(f"depth error: {depth_err, self.area, self.desired_area}")
+            self.get_logger().info(f"error: {self.error, self.area, self.desired_area}")
             #depth_err = self.convert2meter((depth_err,0), self.u0, self.v0, self.lx, self.ly)[0]
 
             # Publish center coordinates
@@ -409,10 +454,10 @@ class BuoyTracker(Node):
 
 
 
-            L  = self.interaction_matrix((x, y),self.depth)
-            self.get_logger().error(f"interaction matrix: {L}")
-            v_cam = self.compute_camera_velocity(L,self.error,depth_err,lambda_gain=self.lambda_gain)
-            self.get_logger().error(f"cam vel: {v_cam}")
+            L  = self.interaction_matrix((x, y),self.area)
+            # self.get_logger().info(f"interaction matrix: {L}")
+            v_cam = self.compute_camera_velocity(L,self.error)
+            # self.get_logger().info(f"cam vel: {v_cam}")
 
 
             # print("Velocity in camera frame: ", v_cam)
@@ -429,17 +474,20 @@ class BuoyTracker(Node):
             # print("desired point: ", self.desired_point())
             # print("error: ", self.error)
             robot_vel = self.full_velocity_transform(v_cam)
+            robot_vel = self.gain_matrix @ robot_vel
 
             # TODO: scale robot_vel with thruster_gain
 
             # publish robot velocity
             robot_velocity_msg = Twist()
-            robot_velocity_msg.linear.x = self.thruster_gain * robot_vel[0]
-            robot_velocity_msg.linear.y = 0.5 * robot_vel[1]
-            robot_velocity_msg.linear.z = self.thruster_gain * robot_vel[2]
-            robot_velocity_msg.angular.x = self.thruster_gain * robot_vel[3]
-            robot_velocity_msg.angular.y = self.thruster_gain * robot_vel[4]
-            robot_velocity_msg.angular.z = self.thruster_gain * robot_vel[5]
+            robot_vel = np.clip(robot_vel, -0.5,0.5)  # Limit the velocity to a range
+            self.get_logger().info(f"robot vel: {robot_vel}")
+            robot_velocity_msg.linear.x = robot_vel[0]
+            robot_velocity_msg.linear.y =  robot_vel[1]
+            robot_velocity_msg.linear.z =  robot_vel[2]
+            robot_velocity_msg.angular.x = robot_vel[3]
+            robot_velocity_msg.angular.y =  robot_vel[4]
+            robot_velocity_msg.angular.z =  robot_vel[5]
             
             self.publisher_robot_velocity.publish(robot_velocity_msg)
 

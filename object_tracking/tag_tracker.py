@@ -7,7 +7,7 @@ from cv_bridge import CvBridge
 import cv2
 import numpy as np
 from geometry_msgs.msg import Twist
-from rcl_interfaces.msg import ParameterDescriptor, SetParametersResult
+from rcl_interfaces.msg import ParameterDescriptor, SetParametersResult,FloatingPointRange
 
 
 class ArucoStatsPublisher(Node):
@@ -15,8 +15,8 @@ class ArucoStatsPublisher(Node):
         super().__init__('aruco_stats_publisher')
 
         # Camera intrinsic parameters
-        self.u0 = 320  # Principal point
-        self.v0 = 240
+        self.u0 = 500  # Principal point
+        self.v0 = 275
         self.lx = 455  # Focal length / pixel size
         self.ly = 455
 
@@ -40,52 +40,60 @@ class ArucoStatsPublisher(Node):
         self.aruco_params = cv2.aruco.DetectorParameters()
 
         # Parameters
-        self.lambda_gain = 0.5
-        self.thruster_gain = 0.5
-        self.config = {}
-        self.declare_and_set_params()
-        self.add_on_set_parameters_callback(self.set_parameters_callback)
+        self.gain_matrix = np.eye(6)  # Identity matrix
+        
+        # Define DoF names (linear first, then angular)
+        self.dof_names = ['surge', 'sway', 'heave', 'roll', 'pitch', 'yaw']
+        
+        # Declare all parameters with descriptive names
+        for dof in self.dof_names:
+            float_range = FloatingPointRange(from_value=-1.0, to_value=1.0, step=0.0001)
+            self.declare_parameter(f'{dof}_gain', 0.0, ParameterDescriptor(
+                description= 'slider control gain for ' + dof,
+                read_only=False,
+                floating_point_range= [float_range],
+                additional_constraints= 'must be between -1.0 and 1.0'
+            ))
+
+        # Set up parameter callback
+        self.add_on_set_parameters_callback(self.parameter_callback)
+        self.update_matrix_from_params()
+
 
         # OpenCV window for visualization
         cv2.namedWindow("ArUco Tag Tracker")
         cv2.setMouseCallback("ArUco Tag Tracker", self.click_detect)
 
         # Transformation constants
-        self.camera_to_robot_rotation = np.array([
-            [0, 0, 1],
-            [-1, 0, 0],
-            [0, -1, 0]
-        ])
-        self.camera_to_robot_translation = np.array([0.0, 0.03, 0.172])
+        # self.camera_to_robot_rotation = np.array([
+        #     [0, 0, 1],
+        #     [-1, 0, 0],
+        #     [0, -1, 0]
+        # ])
+        # self.camera_to_robot_translation = np.array([0.0, 0.03, 0.172])
 
-    def update_parameters(self):
-        self.lambda_gain = float(self.config.get('lambda_gain', 0.5))
-        self.get_logger().info(f">>>>>>>>>>>>>>>>>>>>>>>>>>> lambda_gain updated to: {self.lambda_gain}")
-        self.thruster_gain = float(self.config.get('thruster_gain', 0.5))
-        self.get_logger().info(f"=========================== thruster_gain updated to: {self.thruster_gain}")
-    
-    def set_parameters_callback(self, params):
+    def parameter_callback(self, params):
+        """Handle parameter updates"""
         for param in params:
-            self.config[param.name] = param.value
-
-        self.update_parameters()
+            if param.name.endswith('_gain') and param.name.split('_')[0] in self.dof_names:
+                dof = param.name.split('_')[0]
+                idx = self.dof_names.index(dof)
+                self.gain_matrix[idx, idx] = param.value
+        
+        self.get_logger().info(f"Updated gains: {self.get_current_gains()}")
         return SetParametersResult(successful=True)
 
-    def declare_and_set_params(self):
-        # declare
-        self._declare_and_fill_map('lambda_gain', 0.5, 'lambda gain for camera velocity', self.config)
-        self._declare_and_fill_map('thruster_gain', 0.5, 'thruster gain for the robot velocity', self.config)
+    def update_matrix_from_params(self):
+        """Update all matrix elements from current parameters"""
+        for i, dof in enumerate(self.dof_names):
+            self.gain_matrix[i,i] = self.get_parameter(f'{dof}_gain').value
 
-        self.update_parameters()
-        # pass
 
-    def _declare_and_fill_map(self, key, val, description, map):
-        param = self.declare_parameter(
-            key, val, ParameterDescriptor(description=description))
-        map[key] = param.value
-        # pass
+    def get_current_gains(self):
+        """Return gains as a readable dict"""
+        return {dof: self.gain_matrix[i,i] for i, dof in enumerate(self.dof_names)}
+    
 
-        
     def click_detect(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDBLCLK:
             self.set_desired_point = True
@@ -120,7 +128,7 @@ class ArucoStatsPublisher(Node):
 
         num_pts = len(pts) // 2
         L = []
-        Z = 1  # Assume constant depth for simplicity
+        Z = 0.5  # Assume constant depth for simplicity
 
         for i in range(num_pts):
             x = pts[2*i]
@@ -136,8 +144,8 @@ class ArucoStatsPublisher(Node):
         return np.vstack(L)
     
 
-    def compute_velocity(self, L: np.ndarray, errors: np.ndarray, lambda_gain: float) -> np.ndarray:
-        return -lambda_gain * np.linalg.pinv(L) @ errors
+    def compute_velocity(self, L: np.ndarray, errors: np.ndarray) -> np.ndarray:
+        return - np.linalg.pinv(L) @ errors
 
 
 
@@ -234,7 +242,7 @@ class ArucoStatsPublisher(Node):
                 cv2.circle(frame, (int(cx), int(cy)), 5, color, -1)
 
             # Filter for specific IDs and build output message
-            desired_ids = {1, 3,7}
+            desired_ids = {1,2,3,6,7,8}
             selected = [s for s in stats if s[3] in desired_ids]
             self.selected_points = selected
             msg_out = Float32MultiArray()
@@ -268,19 +276,26 @@ class ArucoStatsPublisher(Node):
                         if marker_id in self.desired_points:
                             cx, cy = self.current_points[marker_id]
                             des_cx, des_cy = self.desired_points[marker_id]
-                            errors.extend([(cx - des_cx)*0.001, (cy - des_cy)*0.001])
+                            errors.extend([(cx - des_cx), (cy - des_cy)])
                             msg_out_tracked.data.extend([cx - des_cx, cy - des_cy])
                             self.current_points_arr.extend([cx, cy])
+                    
+                    # Publish tracked point errors
+                    self.publisher.publish(msg_out_tracked)
                     # Compute interaction matrix
+                    
                     L = self.interaction_matrix(self.current_points_arr)
-                    self.get_logger().info(f"Interaction matrix L: {L}")
+                    # self.get_logger().info(f"Interaction matrix L: {L}")
                     # Compute errors
                     errors = np.array(errors)
-                    self.get_logger().info(f"Errors: {errors}")
+                    # self.get_logger().info(f"Errors: {errors}")
 
                     # Compute velocity
-                    v_camera = self.compute_velocity(L, errors, self.lambda_gain)
+                    v_camera = self.compute_velocity(L, errors)
                     v_robot = self.full_velocity_transform(v_camera)
+                    #multiply by gain matrix
+                    v_robot = self.gain_matrix @ v_robot
+                    # self.get_logger().info(f"v_robot: {v_robot}")
 
                     # Publish camera velocity
                     cam_velocity = Twist()
@@ -295,17 +310,18 @@ class ArucoStatsPublisher(Node):
 
                     # Publish robot velocity
                     msg_out_robot = Twist()
-                    msg_out_robot.linear.x = v_robot[0] * self.thruster_gain
-                    msg_out_robot.linear.y = v_robot[1] * self.thruster_gain
-                    msg_out_robot.linear.z = v_robot[2] * self.thruster_gain
-                    msg_out_robot.angular.x = v_robot[3] * self.thruster_gain
-                    msg_out_robot.angular.y = v_robot[4] * self.thruster_gain
-                    msg_out_robot.angular.z = v_robot[5] * self.thruster_gain
+                    # limit the velocity to -1, 1
+                    v_robot = np.clip(v_robot, -0.5, 0.5)
+                    self.get_logger().info(f"v_robot: {v_robot}")
+                    msg_out_robot.linear.x = v_robot[0] #* self.thruster_gain
+                    msg_out_robot.linear.y = v_robot[1] #* self.thruster_gain
+                    msg_out_robot.linear.z = v_robot[2] #* self.thruster_gain
+                    msg_out_robot.angular.x = v_robot[3]# * self.thruster_gain
+                    msg_out_robot.angular.y = v_robot[4]# * self.thruster_gain
+                    msg_out_robot.angular.z = v_robot[5]# * self.thruster_gain
                     
                     self.publisher_robot_velocity.publish(msg_out_robot)
 
-                    # Publish tracked point errors
-                    self.publisher.publish(msg_out_tracked)
 
         # Show and republish annotated image
         cv2.imshow("ArUco Tag Tracker", frame)
